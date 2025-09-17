@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Decision Tree</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            height: 100vh;
+            color: #333;
+            overflow: hidden;
+        }
+
+        .header {
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: white;
+            color: #333;
+            font-size: 0.9rem;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .btn:hover {
+            background: #f0f0f0;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn.recording {
+            background: #ff4444;
+            color: white;
+            border-color: #ff4444;
+        }
+
+        .main-content {
+            height: calc(100vh - 80px);
+            background: white;
+            display: flex;
+            flex-direction: column;
+        }
+
+
+        .graph-panel {
+            flex: 1;
+            background: white;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .canvas-container {
+            height: 50%;
+            position: relative;
+            overflow-x: auto;
+            overflow-y: hidden;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .theme-container {
+            height: 50%;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .canvas {
+            width: 100%;
+            height: 100%;
+            background: #fafafa;
+            min-width: 2000px; /* Enable horizontal scrolling */
+            position: relative;
+        }
+
+        .theme-canvas {
+            width: 100%;
+            height: 100%;
+            background: #f8f9fa;
+            position: relative;
+        }
+
+        .canvas:empty::before {
+            content: "Decision tree will appear here";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #999;
+            font-style: italic;
+        }
+
+        .node {
+            position: absolute;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 12px 16px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            min-width: 120px;
+            max-width: 200px;
+            text-align: left;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 10;
+            line-height: 1.4;
+        }
+
+        .node.visible {
+            opacity: 1;
+        }
+
+        .node:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .theme-node {
+            position: absolute;
+            background: linear-gradient(135deg, #e8f5e8, #c8e6c9);
+            border: 1px solid #4caf50;
+            border-radius: 20px;
+            padding: 8px 16px;
+            font-size: 0.8rem;
+            color: #2e7d32;
+            font-weight: 500;
+            cursor: pointer;
+            opacity: 0;
+            transition: all 0.4s ease;
+            z-index: 10;
+            white-space: nowrap;
+        }
+
+        .theme-node.visible {
+            opacity: 1;
+        }
+
+        .theme-node:hover {
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+        }
+
+        .connection {
+            position: absolute;
+            height: 1px;
+            background: #ccc;
+            transform-origin: left center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 5;
+        }
+
+        .connection.visible {
+            opacity: 1;
+        }
+
+        .connection-label {
+            position: absolute;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 0.7rem;
+            color: #666;
+            white-space: nowrap;
+            z-index: 6;
+            transform: translate(-50%, -50%);
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #666;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #666;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .status {
+            padding: 20px;
+            background: #f0f8ff;
+            border-top: 2px solid #2196f3;
+            text-align: center;
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: #1976d2;
+            min-height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .status.listening {
+            background: linear-gradient(135deg, #e8f5e8, #c8e6c9);
+            border-color: #4caf50;
+            color: #2e7d32;
+            font-size: 2.2rem;
+            animation: pulse-status 1.5s infinite;
+        }
+
+        @keyframes pulse-status {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Voice Decision Tree</h1>
+        <div class="controls">
+            <button id="recordBtn" class="btn">Start Recording</button>
+            <button id="analyzeBtn" class="btn" disabled>Analyze</button>
+            <button id="clearBtn" class="btn">Clear</button>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="graph-panel">
+            <div class="canvas-container">
+                <div class="canvas" id="canvas">
+                    <div class="loading" id="loading" style="display: none;">
+                        <div class="spinner"></div>
+                        <p>Analyzing conversation...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="theme-container">
+                <div class="theme-canvas" id="themeCanvas"></div>
+            </div>
+            <div class="status" id="status">Ready to record</div>
+        </div>
+    </div>
+
+    <script>
+        class VoiceDecisionTree {
+            constructor() {
+                this.recognition = null;
+                this.isRecording = false;
+                this.transcriptionBuffer = [];
+                this.currentSegment = '';
+                this.lastPauseTime = 0;
+                this.pauseThreshold = 2000; // 2 seconds
+                this.graphNodes = [];
+                this.themeNodes = [];
+                this.nodeCounter = 0;
+                this.themeCounter = 0;
+                this.backgroundAnalysis = [];
+                this.themeAnalysisBuffer = [];
+                
+                this.initializeElements();
+                this.setupEventListeners();
+                this.initializeSpeechRecognition();
+                this.startPauseDetection();
+                this.startThemeAnalysis();
+            }
+
+            initializeElements() {
+                this.recordBtn = document.getElementById('recordBtn');
+                this.status = document.getElementById('status');
+                this.analyzeBtn = document.getElementById('analyzeBtn');
+                this.clearBtn = document.getElementById('clearBtn');
+                this.canvas = document.getElementById('canvas');
+                this.themeCanvas = document.getElementById('themeCanvas');
+                this.loading = document.getElementById('loading');
+            }
+
+            setupEventListeners() {
+                this.recordBtn.addEventListener('click', () => this.toggleRecording());
+                this.analyzeBtn.addEventListener('click', () => this.analyzeConversation());
+                this.clearBtn.addEventListener('click', () => this.clearAll());
+            }
+
+            initializeSpeechRecognition() {
+                if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                    this.recognition = new SpeechRecognition();
+                    this.recognition.continuous = true;
+                    this.recognition.interimResults = true;
+                    this.recognition.lang = 'en-US';
+                    this.recognition.maxAlternatives = 1;
+                    
+                    // More aggressive settings to prevent auto-stop
+                    if ('webkitSpeechRecognition' in window) {
+                        this.recognition.serviceURI = 'wss://www.google.com/speech-api/v1/recognize';
+                    }
+
+                    this.recognition.onstart = () => {
+                        this.isRecording = true;
+                        this.recordBtn.classList.add('recording');
+                        this.recordBtn.textContent = 'Stop Recording';
+                        this.status.classList.add('listening');
+                        this.status.textContent = 'Listening...';
+                    };
+
+            this.recognition.onresult = (event) => {
+                let finalTranscript = '';
+                let interimTranscript = '';
+
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript;
+                        this.lastPauseTime = Date.now(); // Update last speech time
+                    } else {
+                        interimTranscript += transcript;
+                    }
+                }
+
+                if (finalTranscript) {
+                    this.addTranscription(finalTranscript);
+                }
+
+                // Show live interim results
+                this.showLiveTranscription(interimTranscript);
+            };
+
+                    this.recognition.onerror = (event) => {
+                        console.error('Speech recognition error:', event.error);
+                        
+                        // Don't stop for network errors - just restart
+                        if (event.error === 'network' || event.error === 'audio-capture') {
+                            this.status.textContent = 'Reconnecting...';
+                            if (this.isRecording) {
+                                setTimeout(() => this.restartRecognition(), 1000);
+                            }
+                        } else {
+                            this.status.textContent = 'Error: ' + event.error;
+                            this.stopRecording();
+                        }
+                    };
+
+                    this.recognition.onend = () => {
+                        // Auto-restart if we're supposed to be recording
+                        if (this.isRecording) {
+                            console.log('Recognition ended, restarting...');
+                            setTimeout(() => this.restartRecognition(), 500);
+                        }
+                    };
+                } else {
+                    this.status.textContent = 'Speech recognition not supported';
+                    this.recordBtn.disabled = true;
+                }
+            }
+
+            toggleRecording() {
+                if (this.isRecording) {
+                    this.stopRecording();
+                } else {
+                    this.startRecording();
+                }
+            }
+
+            startRecording() {
+                if (this.recognition) {
+                    this.recognition.start();
+                }
+            }
+
+            restartRecognition() {
+                if (this.isRecording && this.recognition) {
+                    try {
+                        console.log('Attempting to restart recognition...');
+                        this.recognition.start();
+                        this.status.classList.add('listening');
+                        this.status.textContent = 'Listening...';
+                    } catch (error) {
+                        console.error('Failed to restart recognition:', error);
+                        // Try again in 2 seconds
+                        setTimeout(() => this.restartRecognition(), 2000);
+                    }
+                }
+            }
+
+            stopRecording() {
+                if (this.recognition) {
+                    this.recognition.stop();
+                }
+                this.isRecording = false;
+                this.recordBtn.classList.remove('recording');
+                this.recordBtn.textContent = 'Start Recording';
+                this.status.classList.remove('listening');
+                this.status.textContent = 'Ready to record';
+                this.analyzeBtn.disabled = false;
+                this.clearLiveTranscription();
+            }
+
+            showLiveTranscription(text) {
+                if (text.trim()) {
+                    this.status.textContent = `"${text}"`;
+                } else {
+                    this.status.textContent = 'Listening...';
+                }
+            }
+
+            clearLiveTranscription() {
+                this.status.classList.remove('listening');
+                this.status.textContent = 'Ready to record';
+            }
+
+            addTranscription(text) {
+                this.transcriptionBuffer.push(text);
+                this.currentSegment += ' ' + text;
+                this.checkForNaturalBreaks(text);
+                
+                // Add to theme analysis buffer
+                this.themeAnalysisBuffer.push(text);
+            }
+
+            startPauseDetection() {
+                // Check for pauses every 500ms
+                setInterval(() => {
+                    if (this.isRecording && this.currentSegment.trim()) {
+                        this.checkForPauses();
+                    }
+                }, 500);
+            }
+
+            checkForNaturalBreaks(text) {
+                // Check for transition words and sentence endings
+                const transitionWords = /\b(but|and|if|however|so|then|also|furthermore|moreover|therefore|thus|hence|consequently|meanwhile|nevertheless|nonetheless|although|despite|in addition|on the other hand|for example|for instance|specifically|in particular|in fact|indeed|actually|basically|essentially|fundamentally)\b/i;
+                const sentenceEndings = /[.!?]+/;
+                
+                // Check for transition words
+                const transitionMatch = text.match(transitionWords);
+                if (transitionMatch) {
+                    this.createNodeFromSegment('transition', transitionMatch[0]);
+                    return;
+                }
+                
+                // Check for sentence endings
+                if (sentenceEndings.test(text)) {
+                    this.createNodeFromSegment('sentence', 'end');
+                    return;
+                }
+            }
+
+            checkForPauses() {
+                const now = Date.now();
+                const timeSinceLastSpeech = now - this.lastPauseTime;
+                
+                if (timeSinceLastSpeech >= this.pauseThreshold && this.currentSegment.trim()) {
+                    this.createNodeFromSegment('pause', 'pause');
+                }
+            }
+
+            createNodeFromSegment(breakType, breakWord) {
+                if (!this.currentSegment.trim()) return;
+                
+                const cleanText = this.currentSegment.trim();
+                this.addTranscriptionNode(cleanText, breakType, breakWord);
+                this.currentSegment = ''; // Reset for next segment
+                
+                // Queue for background analysis
+                this.queueBackgroundAnalysis(cleanText);
+            }
+
+
+            async analyzeConversation() {
+                if (this.transcriptionBuffer.length === 0) return;
+
+                this.loading.style.display = 'block';
+                this.canvas.innerHTML = '';
+                this.canvas.appendChild(this.loading);
+
+                try {
+                    const fullText = this.transcriptionBuffer.join(' ');
+                    const analysis = await this.callOllama(fullText);
+                    
+                    this.semanticChunks.push({
+                        text: fullText,
+                        analysis: analysis,
+                        timestamp: new Date()
+                    });
+
+                    this.createDecisionTree(analysis);
+                } catch (error) {
+                    console.error('Analysis error:', error);
+                    this.canvas.innerHTML = '<p style="color: red; text-align: center; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">Error analyzing conversation. Make sure Ollama is running.</p>';
+                }
+
+                this.loading.style.display = 'none';
+            }
+
+            async callOllama(text) {
+                const response = await fetch('http://localhost:11434/api/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        model: 'llama3.2:3b',
+                        prompt: `Analyze this conversation segment and identify the main elements. Respond in JSON format:
+{
+    "type": "topic|decision|action|question",
+    "content": "main content or topic",
+    "connections": ["related idea 1", "related idea 2"],
+    "confidence": 0.8
+}
+
+Conversation segment: "${text}"`,
+                        stream: false
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Ollama API error');
+                }
+
+                const result = await response.json();
+                const analysisText = result.response;
+
+                // Try to extract JSON from response
+                try {
+                    const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
+                    if (jsonMatch) {
+                        return JSON.parse(jsonMatch[0]);
+                    }
+                } catch (e) {
+                    console.warn('Could not parse JSON, using fallback');
+                }
+
+                // Fallback analysis
+                return {
+                    type: "topic",
+                    content: text.substring(0, 50) + "...",
+                    connections: [],
+                    confidence: 0.5
+                };
+            }
+
+            addTranscriptionNode(text, breakType, breakWord) {
+                const nodeId = `node_${this.nodeCounter++}`;
+                const node = {
+                    id: nodeId,
+                    content: text,
+                    breakType: breakType,
+                    breakWord: breakWord,
+                    x: 0,
+                    y: 0
+                };
+
+                // Calculate position for new node (left-to-right layout)
+                this.calculateNodePosition(node);
+                this.graphNodes.push(node);
+
+                // Create visual node
+                this.createVisualNode(node);
+
+                // Create connection to previous node with break annotation
+                this.createConnection(node);
+
+                // Reposition all nodes for better layout
+                this.repositionNodes();
+            }
+
+            calculateNodePosition(node) {
+                const canvasRect = this.canvas.getBoundingClientRect();
+                const startX = 50; // Start from left side
+                const baseY = canvasRect.height / 2; // Center vertically
+                const horizontalSpacing = 250; // Space between nodes horizontally
+                const verticalVariation = 60; // Vertical spacing to prevent overlap
+
+                // Always flow rightward, never wrap
+                node.x = startX + (this.graphNodes.length * horizontalSpacing);
+                
+                // Alternate Y positions to prevent overlap
+                const rowIndex = this.graphNodes.length % 3; // 3 rows
+                const yOffset = (rowIndex - 1) * verticalVariation; // -60, 0, +60
+                node.y = baseY + yOffset;
+                
+                // Ensure within bounds
+                node.y = Math.max(40, Math.min(canvasRect.height - 40, node.y));
+                
+                // Update canvas width to accommodate new node
+                const minWidth = node.x + 300;
+                if (this.canvas.style.minWidth) {
+                    const currentWidth = parseInt(this.canvas.style.minWidth);
+                    if (minWidth > currentWidth) {
+                        this.canvas.style.minWidth = minWidth + 'px';
+                    }
+                } else {
+                    this.canvas.style.minWidth = minWidth + 'px';
+                }
+            }
+
+            createVisualNode(node) {
+                const nodeEl = document.createElement('div');
+                nodeEl.className = 'node';
+                nodeEl.id = node.id;
+                nodeEl.textContent = node.content;
+                nodeEl.style.left = (node.x - 100) + 'px';
+                nodeEl.style.top = (node.y - 20) + 'px';
+                
+                this.canvas.appendChild(nodeEl);
+
+                // Simple fade in
+                setTimeout(() => {
+                    nodeEl.classList.add('visible');
+                }, 100);
+            }
+
+            createConnection(newNode) {
+                // Connect to the most recent node
+                if (this.graphNodes.length > 1) {
+                    const previousNode = this.graphNodes[this.graphNodes.length - 2];
+                    this.createVisualConnection(previousNode, newNode);
+                }
+            }
+
+            createVisualConnection(fromNode, toNode) {
+                const connection = document.createElement('div');
+                connection.className = 'connection';
+                
+                const x1 = fromNode.x;
+                const y1 = fromNode.y;
+                const x2 = toNode.x;
+                const y2 = toNode.y;
+                
+                const length = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+                const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
+                
+                connection.style.left = x1 + 'px';
+                connection.style.top = y1 + 'px';
+                connection.style.width = length + 'px';
+                connection.style.transform = `rotate(${angle}deg)`;
+                
+                this.canvas.appendChild(connection);
+
+                // Add break word annotation
+                if (toNode.breakWord && toNode.breakWord !== 'end') {
+                    const label = document.createElement('div');
+                    label.className = 'connection-label';
+                    label.textContent = toNode.breakWord;
+                    
+                    // Position label at midpoint of connection
+                    const midX = (x1 + x2) / 2;
+                    const midY = (y1 + y2) / 2;
+                    label.style.left = midX + 'px';
+                    label.style.top = midY + 'px';
+                    
+                    this.canvas.appendChild(label);
+                }
+
+                // Simple fade in
+                setTimeout(() => {
+                    connection.classList.add('visible');
+                }, 200);
+            }
+
+            repositionNodes() {
+                // Update visual positions for left-to-right layout with staggering
+                this.graphNodes.forEach((node, index) => {
+                    const nodeEl = document.getElementById(node.id);
+                    if (nodeEl) {
+                        // Recalculate position to ensure no overlap
+                        const canvasRect = this.canvas.getBoundingClientRect();
+                        const baseY = canvasRect.height / 2;
+                        const verticalVariation = 60;
+                        const rowIndex = index % 3;
+                        const yOffset = (rowIndex - 1) * verticalVariation;
+                        
+                        node.y = baseY + yOffset;
+                        node.y = Math.max(40, Math.min(canvasRect.height - 40, node.y));
+                        
+                        nodeEl.style.left = (node.x - 100) + 'px';
+                        nodeEl.style.top = (node.y - 20) + 'px';
+                    }
+                });
+            }
+
+            startThemeAnalysis() {
+                // Analyze themes every 5 seconds
+                setInterval(() => {
+                    if (this.themeAnalysisBuffer.length > 0) {
+                        this.processThemeAnalysis();
+                    }
+                }, 5000);
+            }
+
+            async processThemeAnalysis() {
+                if (this.themeAnalysisBuffer.length === 0) return;
+                
+                const recentText = this.themeAnalysisBuffer.join(' ');
+                this.themeAnalysisBuffer = []; // Clear buffer
+                
+                try {
+                    const themes = await this.extractThemes(recentText);
+                    themes.forEach(theme => this.addThemeNode(theme));
+                } catch (error) {
+                    console.error('Theme analysis error:', error);
+                }
+            }
+
+            async extractThemes(text) {
+                const response = await fetch('http://localhost:11434/api/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        model: 'llama3.2:3b',
+                        prompt: `Extract 1-3 key themes from this text as short phrases (1-3 words each). Return as JSON array:
+["theme1", "theme2", "theme3"]
+
+Text: "${text}"`,
+                        stream: false
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Ollama API error');
+                }
+
+                const result = await response.json();
+                const analysisText = result.response;
+
+                // Try to extract JSON from response
+                try {
+                    const jsonMatch = analysisText.match(/\[[\s\S]*?\]/);
+                    if (jsonMatch) {
+                        return JSON.parse(jsonMatch[0]);
+                    }
+                } catch (e) {
+                    console.warn('Could not parse themes JSON, using fallback');
+                }
+
+                // Fallback themes
+                const words = text.toLowerCase().split(/\s+/);
+                const commonWords = ['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'a', 'an'];
+                const filtered = words.filter(word => word.length > 3 && !commonWords.includes(word));
+                return filtered.slice(0, 3);
+            }
+
+            addThemeNode(theme) {
+                // Check if theme already exists or is very similar
+                const existingTheme = this.findSimilarTheme(theme);
+                if (existingTheme) {
+                    this.strengthenTheme(existingTheme);
+                    return;
+                }
+
+                const themeId = `theme_${this.themeCounter++}`;
+                const themeNode = {
+                    id: themeId,
+                    content: theme,
+                    strength: 1,
+                    cluster: null,
+                    x: 0,
+                    y: 0,
+                    vx: 0, // velocity for physics simulation
+                    vy: 0
+                };
+
+                this.calculateInitialPosition(themeNode);
+                this.themeNodes.push(themeNode);
+                this.createVisualThemeNode(themeNode);
+                this.updateClusters();
+                
+                // Run force-directed layout
+                this.runForceDirectedLayout();
+            }
+
+            findSimilarTheme(newTheme) {
+                const threshold = 0.7; // Similarity threshold
+                return this.themeNodes.find(node => 
+                    this.calculateSimilarity(node.content, newTheme) > threshold
+                );
+            }
+
+            calculateSimilarity(theme1, theme2) {
+                // Simple word overlap similarity
+                const words1 = theme1.toLowerCase().split(/\s+/);
+                const words2 = theme2.toLowerCase().split(/\s+/);
+                
+                const intersection = words1.filter(word => words2.includes(word));
+                const union = [...new Set([...words1, ...words2])];
+                
+                return intersection.length / union.length;
+            }
+
+            strengthenTheme(themeNode) {
+                themeNode.strength += 1;
+                
+                // Update visual to show strength
+                const nodeEl = document.getElementById(themeNode.id);
+                if (nodeEl) {
+                    const scale = 1 + (themeNode.strength * 0.1);
+                    nodeEl.style.transform = `scale(${Math.min(scale, 1.5)})`;
+                    nodeEl.style.opacity = Math.min(0.6 + (themeNode.strength * 0.1), 1);
+                }
+            }
+
+            calculateInitialPosition(node) {
+                const canvasRect = this.themeCanvas.getBoundingClientRect();
+                const centerX = canvasRect.width / 2;
+                const centerY = canvasRect.height / 2;
+                
+                // Start with random position - force-directed layout will handle clustering
+                const angle = Math.random() * 2 * Math.PI;
+                const radius = 50 + Math.random() * 100;
+                
+                node.x = centerX + Math.cos(angle) * radius;
+                node.y = centerY + Math.sin(angle) * radius;
+                
+                // Ensure within bounds
+                node.x = Math.max(60, Math.min(canvasRect.width - 60, node.x));
+                node.y = Math.max(40, Math.min(canvasRect.height - 40, node.y));
+            }
+
+            runForceDirectedLayout() {
+                const iterations = 100;
+                const damping = 0.9;
+                const canvasRect = this.themeCanvas.getBoundingClientRect();
+                
+                for (let iter = 0; iter < iterations; iter++) {
+                    // Reset forces
+                    this.themeNodes.forEach(node => {
+                        node.vx *= damping;
+                        node.vy *= damping;
+                    });
+                    
+                    // Apply forces between all pairs of nodes
+                    for (let i = 0; i < this.themeNodes.length; i++) {
+                        for (let j = i + 1; j < this.themeNodes.length; j++) {
+                            this.applyForcesBetweenNodes(this.themeNodes[i], this.themeNodes[j]);
+                        }
+                    }
+                    
+                    // Apply center attraction
+                    this.themeNodes.forEach(node => {
+                        this.applyCenterAttraction(node, canvasRect);
+                    });
+                    
+                    // Update positions
+                    this.themeNodes.forEach(node => {
+                        node.x += node.vx;
+                        node.y += node.vy;
+                        
+                        // Keep within bounds
+                        node.x = Math.max(60, Math.min(canvasRect.width - 60, node.x));
+                        node.y = Math.max(40, Math.min(canvasRect.height - 40, node.y));
+                    });
+                }
+                
+                // Update visual positions
+                this.updateThemeNodePositions();
+            }
+
+            applyForcesBetweenNodes(nodeA, nodeB) {
+                const dx = nodeB.x - nodeA.x;
+                const dy = nodeB.y - nodeA.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance === 0) return;
+                
+                const similarity = this.calculateSimilarity(nodeA.content, nodeB.content);
+                
+                if (similarity > 0.3) {
+                    // Attraction force for similar themes
+                    const attractionStrength = 0.02 * similarity;
+                    const targetDistance = 80; // Desired distance between similar nodes
+                    
+                    if (distance > targetDistance) {
+                        const force = attractionStrength * (distance - targetDistance) / distance;
+                        nodeA.vx += force * dx;
+                        nodeA.vy += force * dy;
+                        nodeB.vx -= force * dx;
+                        nodeB.vy -= force * dy;
+                    }
+                } else {
+                    // Repulsion force for different themes
+                    const repulsionStrength = 800;
+                    const minDistance = 120;
+                    
+                    if (distance < minDistance) {
+                        const force = repulsionStrength / (distance * distance);
+                        const fx = force * dx / distance;
+                        const fy = force * dy / distance;
+                        
+                        nodeA.vx -= fx;
+                        nodeA.vy -= fy;
+                        nodeB.vx += fx;
+                        nodeB.vy += fy;
+                    }
+                }
+            }
+
+            applyCenterAttraction(node, canvasRect) {
+                const centerX = canvasRect.width / 2;
+                const centerY = canvasRect.height / 2;
+                const centerForce = 0.001;
+                
+                node.vx += (centerX - node.x) * centerForce;
+                node.vy += (centerY - node.y) * centerForce;
+            }
+
+            updateThemeNodePositions() {
+                this.themeNodes.forEach(node => {
+                    const nodeEl = document.getElementById(node.id);
+                    if (nodeEl) {
+                        nodeEl.style.left = (node.x - 50) + 'px';
+                        nodeEl.style.top = (node.y - 15) + 'px';
+                    }
+                });
+            }
+
+            updateClusters() {
+                // Simple clustering: group themes with similarity > 0.4
+                const clusters = [];
+                const processed = new Set();
+                
+                this.themeNodes.forEach(node => {
+                    if (processed.has(node.id)) return;
+                    
+                    const cluster = [node];
+                    processed.add(node.id);
+                    
+                    this.themeNodes.forEach(other => {
+                        if (other.id !== node.id && !processed.has(other.id)) {
+                            if (this.calculateSimilarity(node.content, other.content) > 0.4) {
+                                cluster.push(other);
+                                processed.add(other.id);
+                            }
+                        }
+                    });
+                    
+                    clusters.push(cluster);
+                });
+                
+                // Assign cluster IDs
+                clusters.forEach((cluster, index) => {
+                    cluster.forEach(node => {
+                        node.cluster = index;
+                    });
+                });
+            }
+
+            createVisualThemeNode(node) {
+                const nodeEl = document.createElement('div');
+                nodeEl.className = 'theme-node';
+                nodeEl.id = node.id;
+                nodeEl.textContent = node.content;
+                nodeEl.style.left = (node.x - 50) + 'px';
+                nodeEl.style.top = (node.y - 15) + 'px';
+                
+                this.themeCanvas.appendChild(nodeEl);
+
+                // Animate in
+                setTimeout(() => {
+                    nodeEl.classList.add('visible');
+                }, 100);
+            }
+
+            queueBackgroundAnalysis(text) {
+                // Add to background analysis queue
+                this.backgroundAnalysis.push({
+                    text: text,
+                    timestamp: Date.now(),
+                    analyzed: false
+                });
+                
+                // Process background analysis
+                this.processBackgroundAnalysis();
+            }
+
+            async processBackgroundAnalysis() {
+                const unanalyzed = this.backgroundAnalysis.filter(item => !item.analyzed);
+                if (unanalyzed.length === 0) return;
+                
+                const item = unanalyzed[0];
+                item.analyzed = true;
+                
+                try {
+                    // Run LLM analysis in background
+                    const analysis = await this.callOllama(item.text);
+                    console.log('Background analysis:', analysis);
+                    // Could update node styling or add metadata here
+                } catch (error) {
+                    console.error('Background analysis error:', error);
+                }
+            }
+
+            clearAll() {
+                this.transcriptionBuffer = [];
+                this.currentSegment = '';
+                this.graphNodes = [];
+                this.themeNodes = [];
+                this.backgroundAnalysis = [];
+                this.themeAnalysisBuffer = [];
+                this.nodeCounter = 0;
+                this.themeCounter = 0;
+                this.lastPauseTime = 0;
+                
+                this.canvas.innerHTML = '';
+                this.themeCanvas.innerHTML = '';
+                this.canvas.style.minWidth = '2000px'; // Reset canvas width
+                this.status.classList.remove('listening');
+                this.status.textContent = 'Ready to record';
+                this.analyzeBtn.disabled = true;
+            }
+        }
+
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', () => {
+            new VoiceDecisionTree();
+        });
+    </script>
+</body>
+</html>
